@@ -2,6 +2,7 @@ import warnings
 
 import aiohttp
 
+import warnings
 import json
 import logging
 import re
@@ -106,7 +107,7 @@ class RegexInterpreter(NaturalLanguageInterpreter):
                     f"(instead parser found '{type(parsed_entities)}')"
                 )
         except Exception as e:
-            logger.warning(
+            warnings.warn(
                 f"Invalid to parse arguments in line "
                 f"'{user_input}'. Failed to decode parameters "
                 f"as a json object. Make sure the intent "
@@ -123,7 +124,7 @@ class RegexInterpreter(NaturalLanguageInterpreter):
         try:
             return float(confidence_str.strip()[1:])
         except Exception as e:
-            logger.warning(
+            warnings.warn(
                 f"Invalid to parse confidence value in line "
                 f"'{confidence_str}'. Make sure the intent confidence is an "
                 f"@ followed by a decimal number. "
@@ -155,7 +156,7 @@ class RegexInterpreter(NaturalLanguageInterpreter):
 
             return event_name, confidence, entities
         else:
-            logger.warning(f"Failed to parse intent end entities from '{user_input}'. ")
+            logger.warning(f"Failed to parse intent end entities from '{user_input}'.")
             return None, 0.0, []
 
     async def parse(

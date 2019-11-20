@@ -66,7 +66,7 @@ def _load_from_module_string(broker_config: EndpointConfig,) -> Optional["EventB
         event_broker_class = common.class_from_module_path(broker_config.type)
         return event_broker_class.from_endpoint_config(broker_config)
     except (AttributeError, ImportError) as e:
-        logger.warning(
+        warnings.warn(
             f"The `EventBroker` type '{broker_config.type}' could not be found. "
             f"Not using any event broker. Error: {e}"
         )

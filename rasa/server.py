@@ -1,4 +1,5 @@
 import logging
+import warnings
 import multiprocessing
 import os
 import tempfile
@@ -440,7 +441,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.post("/conversations/<conversation_id>/tracker/events")
@@ -462,9 +463,9 @@ def create_app(
         events = [event for event in events if event]
 
         if not events:
-            logger.warning(
-                "Append event called, but could not extract a valid event. "
-                "Request JSON: {}".format(request.json)
+            warnings.warn(
+                f"Append event called, but could not extract a valid event. "
+                f"Request JSON: {request.json}"
             )
             raise ErrorResponse(
                 400,
@@ -486,7 +487,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.put("/conversations/<conversation_id>/tracker/events")
@@ -515,7 +516,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.get("/conversations/<conversation_id>/story")
@@ -539,7 +540,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.post("/conversations/<conversation_id>/execute")
@@ -577,7 +578,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
         tracker = get_tracker(app.agent, conversation_id)
@@ -604,7 +605,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.post("/conversations/<conversation_id>/messages")
@@ -644,7 +645,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "ConversationError", f"An unexpected error occurred. Error: {e}",
+                500, "ConversationError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.post("/model/train")
@@ -863,7 +864,7 @@ def create_app(
         except Exception as e:
             logger.debug(traceback.format_exc())
             raise ErrorResponse(
-                500, "PredictionError", f"An unexpected error occurred. Error: {e}",
+                500, "PredictionError", f"An unexpected error occurred. Error: {e}"
             )
 
     @app.post("/model/parse")
@@ -887,7 +888,7 @@ def create_app(
             except Exception as e:
                 logger.debug(traceback.format_exc())
                 raise ErrorResponse(
-                    400, "ParsingError", f"An unexpected error occurred. Error: {e}",
+                    400, "ParsingError", f"An unexpected error occurred. Error: {e}"
                 )
             response_data = emulator.normalise_response_json(parsed_data)
 
