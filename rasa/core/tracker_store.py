@@ -4,6 +4,7 @@ import logging
 import os
 import pickle
 import typing
+import warnings
 from datetime import datetime, timezone
 from typing import Iterator, Optional, Text, Iterable, Union, Dict, Callable
 
@@ -14,7 +15,7 @@ from boto3.dynamodb.conditions import Key
 from time import sleep
 
 from rasa.core.actions.action import ACTION_LISTEN_NAME
-from rasa.core.brokers.event_channel import EventChannel
+from rasa.core.brokers.broker import EventBroker
 from rasa.core.conversation import Dialogue
 from rasa.core.domain import Domain
 from rasa.core.trackers import ActionExecuted, DialogueStateTracker, EventVerbosity
@@ -35,101 +36,41 @@ class TrackerStore:
     """Class to hold all of the TrackerStore classes"""
 
     def __init__(
-        self, domain: Optional[Domain], event_broker: Optional[EventChannel] = None
+        self, domain: Optional[Domain], event_broker: Optional[EventBroker] = None
     ) -> None:
         self.domain = domain
         self.event_broker = event_broker
         self.max_event_history = None
 
     @staticmethod
-    def find_tracker_store(
+    def create(
+        obj: Union["TrackerStore", EndpointConfig, None],
+        domain: Optional[Domain] = None,
+        event_broker: Optional[EventBroker] = None,
+    ) -> "TrackerStore":
+        """Factory to create a generator."""
+
+        if isinstance(obj, TrackerStore):
+            return obj
+        else:
+            return _create_from_endpoint_config(obj, domain, event_broker)
+
+    @staticmethod
+    def create_tracker_store(
         domain: Domain,
         store: Optional[EndpointConfig] = None,
-        event_broker: Optional[EventChannel] = None,
+        event_broker: Optional[EventBroker] = None,
     ) -> "TrackerStore":
         """Returns the tracker_store type"""
 
-        tracker_store = None
-        if store is not None and store.type is not None:
-            try:
-                tracker_store = TrackerStore._create_tracker_store(
-                    domain, store, event_broker
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error when trying to connect to '{store.type}' "
-                    f"tracker store. Using "
-                    f"'{InMemoryTrackerStore.__name__}'' instead. "
-                    f"The causing error was: {e}."
-                )
+        warnings.warn(
+            "Deprecated, use `TrackerStore.create` instead. "
+            "The `create_tracker_store` function will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
-        if not tracker_store:
-            tracker_store = InMemoryTrackerStore(domain, event_broker)
-
-        logger.debug("Connected to {}.".format(tracker_store.__class__.__name__))
-
-        return tracker_store
-
-    @staticmethod
-    def _create_tracker_store(
-        domain: Domain, store: EndpointConfig, event_broker: Optional[EventChannel]
-    ) -> "TrackerStore":
-        if store.type.lower() == "redis":
-            tracker_store = RedisTrackerStore(
-                domain=domain, host=store.url, event_broker=event_broker, **store.kwargs
-            )
-        elif store.type.lower() == "mongod":
-            tracker_store = MongoTrackerStore(
-                domain=domain, host=store.url, event_broker=event_broker, **store.kwargs
-            )
-        elif store.type.lower() == "sql":
-            tracker_store = SQLTrackerStore(
-                domain=domain, host=store.url, event_broker=event_broker, **store.kwargs
-            )
-        elif store.type.lower() == "dynamo":
-            tracker_store = DynamoTrackerStore(
-                domain=domain, event_broker=event_broker, **store.kwargs
-            )
-        else:
-            tracker_store = TrackerStore.load_tracker_from_module_string(
-                domain, store, event_broker
-            )
-
-        return tracker_store
-
-    @staticmethod
-    def load_tracker_from_module_string(
-        domain: Domain,
-        store: EndpointConfig,
-        event_broker: Optional[EventChannel] = None,
-    ) -> "TrackerStore":
-        """
-        Initializes a custom tracker.
-
-        Args:
-            domain: defines the universe in which the assistant operates
-            store: the specific tracker store
-            event_broker: an event broker to publish events
-
-        Returns:
-            custom_tracker: a tracker store from a specified database
-            InMemoryTrackerStore: only used if no other tracker store is configured
-        """
-        custom_tracker = None
-        try:
-            custom_tracker = class_from_module_path(store.type)
-        except (AttributeError, ImportError):
-            logger.warning(
-                "Store type '{}' not found. "
-                "Using InMemoryTrackerStore instead".format(store.type)
-            )
-
-        if custom_tracker:
-            return custom_tracker(
-                domain=domain, url=store.url, event_broker=event_broker, **store.kwargs
-            )
-        else:
-            return InMemoryTrackerStore(domain)
+        return TrackerStore.create(store, domain, event_broker)
 
     def get_or_create_tracker(
         self, sender_id: Text, max_event_history: Optional[int] = None
@@ -152,7 +93,10 @@ class TrackerStore:
     def create_tracker(
         self, sender_id: Text, append_action_listen: bool = True
     ) -> DialogueStateTracker:
-        """Creates a new tracker for the sender_id. The tracker is initially listening."""
+        """Creates a new tracker for the sender_id.
+
+        The tracker is initially listening."""
+
         tracker = self.init_tracker(sender_id)
         if tracker:
             if append_action_listen:
@@ -161,11 +105,11 @@ class TrackerStore:
         return tracker
 
     def save(self, tracker):
-        """Save method that will be overriden by specific tracker"""
+        """Save method that will be overridden by specific tracker"""
         raise NotImplementedError()
 
     def retrieve(self, sender_id: Text) -> Optional[DialogueStateTracker]:
-        """Retrieve method that will be overriden by specific tracker"""
+        """Retrieve method that will be overridden by specific tracker"""
         raise NotImplementedError()
 
     def stream_events(self, tracker: DialogueStateTracker) -> None:
@@ -200,7 +144,7 @@ class TrackerStore:
 
         logger.warning(
             f"DEPRECATION warning: Found pickled tracker for "
-            f"conversation ID '{sender_id}'. Deserialisation of pickled "
+            f"conversation ID '{sender_id}'. Deserialization of pickled "
             f"trackers will be deprecated in version 2.0. Rasa will perform any "
             f"future save operations of this tracker using json serialisation."
         )
@@ -231,7 +175,7 @@ class InMemoryTrackerStore(TrackerStore):
     """Stores conversation history in memory"""
 
     def __init__(
-        self, domain: Domain, event_broker: Optional[EventChannel] = None
+        self, domain: Domain, event_broker: Optional[EventBroker] = None
     ) -> None:
         self.store = {}
         super().__init__(domain, event_broker)
@@ -273,7 +217,7 @@ class RedisTrackerStore(TrackerStore):
         port=6379,
         db=0,
         password: Optional[Text] = None,
-        event_broker: Optional[EventChannel] = None,
+        event_broker: Optional[EventBroker] = None,
         record_exp: Optional[float] = None,
         use_ssl: bool = False,
     ):
@@ -329,7 +273,8 @@ class DynamoTrackerStore(TrackerStore):
         """
         Args:
             domain:
-            table_name: The name of the DynamoDb table, does not need to be present a priori.
+            table_name: The name of the DynamoDb table, does not
+                need to be present a priori.
             event_broker:
         """
         import boto3
@@ -536,7 +481,7 @@ class SQLTrackerStore(TrackerStore):
         db: Text = "rasa.db",
         username: Text = None,
         password: Text = None,
-        event_broker: Optional[EventChannel] = None,
+        event_broker: Optional[EventBroker] = None,
         login_db: Optional[Text] = None,
         query: Optional[Dict] = None,
     ) -> None:
@@ -547,9 +492,7 @@ class SQLTrackerStore(TrackerStore):
         engine_url = self.get_db_url(
             dialect, host, port, db, username, password, login_db, query
         )
-        logger.debug(
-            "Attempting to connect to database via '{}'.".format(repr(engine_url))
-        )
+        logger.debug(f"Attempting to connect to database via '{repr(engine_url)}'.")
 
         # Database might take a while to come up
         while True:
@@ -718,9 +661,9 @@ class SQLTrackerStore(TrackerStore):
                 )
             else:
                 logger.debug(
-                    "Can't retrieve tracker matching "
-                    "sender id '{}' from SQL storage. "
-                    "Returning `None` instead.".format(sender_id)
+                    f"Can't retrieve tracker matching "
+                    f"sender id '{sender_id}' from SQL storage. "
+                    f"Returning `None` instead."
                 )
                 return None
 
@@ -755,8 +698,7 @@ class SQLTrackerStore(TrackerStore):
             session.commit()
 
         logger.debug(
-            "Tracker with sender_id '{}' "
-            "stored to database".format(tracker.sender_id)
+            f"Tracker with sender_id '{tracker.sender_id}' " f"stored to database"
         )
 
     def _additional_events(
@@ -838,3 +780,77 @@ class FailSafeTrackerStore(TrackerStore):
         except Exception as e:
             self.on_tracker_store_error(e)
             self.fallback_tracker_store.save(tracker)
+
+
+def _create_from_endpoint_config(
+    endpoint_config: Optional[EndpointConfig] = None,
+    domain: Optional[Domain] = None,
+    event_broker: Optional[EventBroker] = None,
+) -> "TrackerStore":
+    """Given an endpoint configuration, create a proper tracker store object."""
+
+    domain = domain or Domain.empty()
+
+    if endpoint_config is None or endpoint_config.type is None:
+        # default tracker store if no type is set
+        tracker_store = InMemoryTrackerStore(domain, event_broker)
+    elif endpoint_config.type.lower() == "redis":
+        tracker_store = RedisTrackerStore(
+            domain=domain,
+            host=endpoint_config.url,
+            event_broker=event_broker,
+            **endpoint_config.kwargs,
+        )
+    elif endpoint_config.type.lower() == "mongod":
+        tracker_store = MongoTrackerStore(
+            domain=domain,
+            host=endpoint_config.url,
+            event_broker=event_broker,
+            **endpoint_config.kwargs,
+        )
+    elif endpoint_config.type.lower() == "sql":
+        tracker_store = SQLTrackerStore(
+            domain=domain,
+            host=endpoint_config.url,
+            event_broker=event_broker,
+            **endpoint_config.kwargs,
+        )
+    elif endpoint_config.type.lower() == "dynamo":
+        tracker_store = DynamoTrackerStore(
+            domain=domain, event_broker=event_broker, **endpoint_config.kwargs
+        )
+    else:
+        tracker_store = _load_from_module_string(domain, endpoint_config, event_broker)
+
+    logger.debug(f"Connected to {tracker_store.__class__.__name__}.")
+
+    return tracker_store
+
+
+def _load_from_module_string(
+    domain: Domain, store: EndpointConfig, event_broker: Optional[EventBroker] = None,
+) -> "TrackerStore":
+    """Initializes a custom tracker.
+
+    Defaults to the InMemoryTrackerStore if the module path can not be found.
+
+    Args:
+        domain: defines the universe in which the assistant operates
+        store: the specific tracker store
+        event_broker: an event broker to publish events
+
+    Returns:
+        a tracker store from a specified type in a stores endpoint configuration
+    """
+
+    try:
+        tracker_store_class = class_from_module_path(store.type)
+        return tracker_store_class(
+            domain=domain, url=store.url, event_broker=event_broker, **store.kwargs
+        )
+    except (AttributeError, ImportError):
+        warnings.warn(
+            f"Tracker store type '{store.type}' not found. "
+            f"Using `InMemoryTrackerStore` instead."
+        )
+        return InMemoryTrackerStore(domain)

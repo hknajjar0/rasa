@@ -1,3 +1,5 @@
+import warnings
+
 import aiohttp
 
 import json
@@ -10,6 +12,7 @@ from typing import Text, List, Dict, Any, Union, Optional, Tuple
 from rasa.core import constants
 from rasa.core.trackers import DialogueStateTracker
 from rasa.core.constants import INTENT_MESSAGE_PREFIX
+from rasa.utils import common
 from rasa.utils.endpoints import EndpointConfig
 
 logger = logging.getLogger(__name__)
@@ -28,35 +31,37 @@ class NaturalLanguageInterpreter:
 
     @staticmethod
     def create(
-        obj: Union[Text, "NaturalLanguageInterpreter"],
+        obj: Union["NaturalLanguageInterpreter", EndpointConfig, Text, None],
+        # this second parameter is deprecated!
         endpoint: Optional[EndpointConfig] = None,
     ) -> "NaturalLanguageInterpreter":
+        """Factory to create an natural language interpreter."""
+
+        if endpoint is not None:
+            warnings.warn(
+                "Calling `NaturalLanguageInterpreter.create` with two parameters"
+                "is deprecated. The `endpoint` parameter will be removed in the "
+                "future. You should replace a call "
+                "`NaturalLanguageInterpreter.create(s, e)` "
+                "with the single parameter version "
+                "`NaturalLanguageInterpreter.create(e or s)`.",
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            obj = endpoint or obj
 
         if isinstance(obj, NaturalLanguageInterpreter):
             return obj
-
-        if not isinstance(obj, str):
-            if obj is not None:
-                logger.warning(
-                    "Tried to create NLU interpreter "
-                    "from '{}', which is not possible."
-                    "Using RegexInterpreter instead."
-                    "".format(obj)
-                )
+        elif isinstance(obj, str) and os.path.exists(obj):
+            return RasaNLUInterpreter(model_directory=obj)
+        elif isinstance(obj, str) and not os.path.exists(obj):
+            # user passed in a string, but file does not exist
+            logger.warning(
+                f"No local NLU model '{obj}' found. Using RegexInterpreter instead."
+            )
             return RegexInterpreter()
-
-        if endpoint is None:
-            if not os.path.exists(obj):
-                logger.warning(
-                    "No local NLU model '{}' found. Using RegexInterpreter instead.".format(
-                        obj
-                    )
-                )
-                return RegexInterpreter()
-            else:
-                return RasaNLUInterpreter(model_directory=obj)
-
-        return RasaNLUHttpInterpreter(endpoint)
+        else:
+            return _create_from_endpoint_config(obj)
 
 
 class RegexInterpreter(NaturalLanguageInterpreter):
@@ -97,17 +102,16 @@ class RegexInterpreter(NaturalLanguageInterpreter):
                 return RegexInterpreter._create_entities(parsed_entities, sidx, eidx)
             else:
                 raise Exception(
-                    "Parsed value isn't a json object "
-                    "(instead parser found '{}')"
-                    ".".format(type(parsed_entities))
+                    f"Parsed value isn't a json object "
+                    f"(instead parser found '{type(parsed_entities)}')"
                 )
         except Exception as e:
             logger.warning(
-                "Invalid to parse arguments in line "
-                "'{}'. Failed to decode parameters "
-                "as a json object. Make sure the intent "
-                "is followed by a proper json object. "
-                "Error: {}".format(user_input, e)
+                f"Invalid to parse arguments in line "
+                f"'{user_input}'. Failed to decode parameters "
+                f"as a json object. Make sure the intent "
+                f"is followed by a proper json object. "
+                f"Error: {e}"
             )
             return []
 
@@ -120,10 +124,10 @@ class RegexInterpreter(NaturalLanguageInterpreter):
             return float(confidence_str.strip()[1:])
         except Exception as e:
             logger.warning(
-                "Invalid to parse confidence value in line "
-                "'{}'. Make sure the intent confidence is an "
-                "@ followed by a decimal number. "
-                "Error: {}".format(confidence_str, e)
+                f"Invalid to parse confidence value in line "
+                f"'{confidence_str}'. Make sure the intent confidence is an "
+                f"@ followed by a decimal number. "
+                f"Error: {e}"
             )
             return 0.0
 
@@ -178,11 +182,11 @@ class RegexInterpreter(NaturalLanguageInterpreter):
 
 
 class RasaNLUHttpInterpreter(NaturalLanguageInterpreter):
-    def __init__(self, endpoint: EndpointConfig = None) -> None:
-        if endpoint:
-            self.endpoint = endpoint
+    def __init__(self, endpoint_config: Optional[EndpointConfig] = None) -> None:
+        if endpoint_config:
+            self.endpoint_config = endpoint_config
         else:
-            self.endpoint = EndpointConfig(constants.DEFAULT_SERVER_URL)
+            self.endpoint_config = EndpointConfig(constants.DEFAULT_SERVER_URL)
 
     async def parse(
         self,
@@ -199,33 +203,33 @@ class RasaNLUHttpInterpreter(NaturalLanguageInterpreter):
             "entities": [],
             "text": "",
         }
-        result = await self._rasa_http_parse(text, message_id, tracker)
+        result = await self._rasa_http_parse(text, message_id)
 
         return result if result is not None else default_return
 
     async def _rasa_http_parse(
-        self,
-        text: Text,
-        message_id: Optional[Text] = None,
-        tracker: DialogueStateTracker = None,
+        self, text: Text, message_id: Optional[Text] = None,
     ) -> Optional[Dict[Text, Any]]:
         """Send a text message to a running rasa NLU http server.
         Return `None` on failure."""
-        from requests.compat import urljoin  # pytype: disable=import-error
 
-        if not self.endpoint:
+        if not self.endpoint_config:
             logger.error(
-                "Failed to parse text '{}' using rasa NLU over http. "
-                "No rasa NLU server specified!".format(text)
+                f"Failed to parse text '{text}' using rasa NLU over http. "
+                f"No rasa NLU server specified!"
             )
             return None
 
-        params = {"token": self.endpoint.token, "text": text, "message_id": message_id}
+        params = {
+            "token": self.endpoint_config.token,
+            "text": text,
+            "message_id": message_id,
+        }
 
-        if self.endpoint.url.endswith("/"):
-            url = self.endpoint.url + "model/parse"
+        if self.endpoint_config.url.endswith("/"):
+            url = self.endpoint_config.url + "model/parse"
         else:
-            url = self.endpoint.url + "/model/parse"
+            url = self.endpoint_config.url + "/model/parse"
 
         # noinspection PyBroadException
         try:
@@ -235,8 +239,8 @@ class RasaNLUHttpInterpreter(NaturalLanguageInterpreter):
                         return await resp.json()
                     else:
                         logger.error(
-                            "Failed to parse text '{}' using rasa NLU over "
-                            "http. Error: {}".format(text, await resp.text())
+                            f"Failed to parse text '{text}' using rasa NLU over "
+                            f"http. Error: {await resp.text()}"
                         )
                         return None
         except Exception:
@@ -280,3 +284,32 @@ class RasaNLUInterpreter(NaturalLanguageInterpreter):
         from rasa.nlu.model import Interpreter
 
         self.interpreter = Interpreter.load(self.model_directory)
+
+
+def _create_from_endpoint_config(
+    endpoint_config: Optional[EndpointConfig],
+) -> "NaturalLanguageInterpreter":
+    """Instantiate a natural language interpreter based on its configuration."""
+
+    if endpoint_config is None:
+        return RegexInterpreter()
+    elif endpoint_config.type is None or endpoint_config.type.lower() == "http":
+        return RasaNLUHttpInterpreter(endpoint_config=endpoint_config)
+    else:
+        return _load_from_module_string(endpoint_config)
+
+
+def _load_from_module_string(
+    endpoint_config: EndpointConfig,
+) -> "NaturalLanguageInterpreter":
+    """Instantiate an event channel based on its class name."""
+
+    try:
+        nlu_interpreter_class = common.class_from_module_path(endpoint_config.type)
+        return nlu_interpreter_class(endpoint_config=endpoint_config)
+    except (AttributeError, ImportError) as e:
+        raise Exception(
+            f"Could not find a class based on the module path "
+            f"'{endpoint_config.type}'. Failed to create a "
+            f"`NaturalLanguageInterpreter` instance. Error: {e}"
+        )
