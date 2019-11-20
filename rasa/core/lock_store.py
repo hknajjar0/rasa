@@ -13,8 +13,6 @@ from rasa.utils.endpoints import EndpointConfig
 
 logger = logging.getLogger(__name__)
 
-ACCEPTED_LOCK_STORES = ["in_memory", "redis"]
-
 LOCK_LIFETIME = int(os.environ.get("TICKET_LOCK_LIFETIME", 0)) or DEFAULT_LOCK_LIFETIME
 
 
@@ -142,8 +140,8 @@ class LockStore:
                 return lock
 
             logger.debug(
-                "Failed to acquire lock for conversation ID '{}'. Retrying..."
-                "".format(conversation_id)
+                f"Failed to acquire lock for conversation ID '{conversation_id}'. "
+                f"Retrying..."
             )
 
             # sleep and update lock
@@ -151,8 +149,7 @@ class LockStore:
             self.update_lock(conversation_id)
 
         raise LockError(
-            "Could not acquire lock for conversation_id '{}'."
-            "".format(conversation_id)
+            f"Could not acquire lock for conversation_id '{conversation_id}'."
         )
 
     def update_lock(self, conversation_id: Text) -> None:
@@ -227,8 +224,8 @@ class LockStore:
         # that of the one being acquired
         if existing_lock.last_issued != lock.last_issued:
             raise TicketExistsError(
-                "Ticket '{}' already exists for conversation ID '{}'."
-                "".format(existing_lock.last_issued, lock.conversation_id)
+                f"Ticket '{existing_lock.last_issued}' already exists "
+                f"for conversation ID '{lock.conversation_id}'."
             )
 
 
@@ -299,16 +296,6 @@ def _create_from_endpoint_config(
     elif endpoint_config.type == "redis":
         lock_store = RedisLockStore(host=endpoint_config.url, **endpoint_config.kwargs)
     else:
-        logger.debug(
-            "Could not load built-in `LockStore`, which needs to be of "
-            "type: {}. Trying to load `LockStore` from module path '{}' "
-            "instead."
-            "".format(
-                endpoint_config.type,
-                ", ".join(ACCEPTED_LOCK_STORES),
-                endpoint_config.type,
-            )
-        )
         lock_store = _load_from_module_string(endpoint_config.type)
 
     logger.debug(f"Connected to lock store '{lock_store.__class__.__name__}'.")
@@ -322,8 +309,9 @@ def _load_from_module_string(endpoint_config: EndpointConfig) -> "LockStore":
     try:
         lock_store_class = common.class_from_module_path(endpoint_config.type)
         return lock_store_class(endpoint_config=endpoint_config)
-    except (AttributeError, ImportError):
+    except (AttributeError, ImportError) as e:
         raise Exception(
             f"Could not find a class based on the module path "
-            f"'{endpoint_config.type}'. Failed to create a `LockStore` instance."
+            f"'{endpoint_config.type}'. Failed to create a `LockStore` "
+            f"instance. Error: {e}"
         )

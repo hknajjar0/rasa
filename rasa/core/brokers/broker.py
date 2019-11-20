@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class EventBroker:
+    """Base class for any event broker implementation."""
+
     @staticmethod
     def create(
         obj: Union["EventBroker", EndpointConfig, None],
@@ -42,6 +44,7 @@ def _create_from_endpoint_config(
     elif endpoint_config.type is None or endpoint_config.type.lower() == "pika":
         from rasa.core.brokers.pika import PikaEventBroker
 
+        # default broker if no type is set
         broker = PikaEventBroker.from_endpoint_config(endpoint_config)
     elif endpoint_config.type.lower() == "sql":
         from rasa.core.brokers.sql import SQLEventBroker
@@ -58,7 +61,7 @@ def _create_from_endpoint_config(
     else:
         broker = _load_from_module_string(endpoint_config)
 
-    logger.debug(f"Instantiated NLG to '{broker.__class__.__name__}'.")
+    logger.debug(f"Instantiated event broker to '{broker.__class__.__name__}'.")
     return broker
 
 
