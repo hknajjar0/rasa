@@ -38,25 +38,28 @@ def _create_from_endpoint_config(
     """Instantiate an event broker based on its configuration."""
 
     if endpoint_config is None:
-        return None
+        broker = None
     elif endpoint_config.type is None or endpoint_config.type.lower() == "pika":
         from rasa.core.brokers.pika import PikaEventBroker
 
-        return PikaEventBroker.from_endpoint_config(endpoint_config)
+        broker = PikaEventBroker.from_endpoint_config(endpoint_config)
     elif endpoint_config.type.lower() == "sql":
         from rasa.core.brokers.sql import SQLEventBroker
 
-        return SQLEventBroker.from_endpoint_config(endpoint_config)
+        broker = SQLEventBroker.from_endpoint_config(endpoint_config)
     elif endpoint_config.type.lower() == "file":
         from rasa.core.brokers.file import FileEventBroker
 
-        return FileEventBroker.from_endpoint_config(endpoint_config)
+        broker = FileEventBroker.from_endpoint_config(endpoint_config)
     elif endpoint_config.type.lower() == "kafka":
         from rasa.core.brokers.kafka import KafkaEventBroker
 
-        return KafkaEventBroker.from_endpoint_config(endpoint_config)
+        broker = KafkaEventBroker.from_endpoint_config(endpoint_config)
     else:
-        return _load_from_module_string(endpoint_config)
+        broker = _load_from_module_string(endpoint_config)
+
+    logger.debug(f"Instantiated NLG to '{broker.__class__.__name__}'.")
+    return broker
 
 
 def _load_from_module_string(broker_config: EndpointConfig,) -> Optional["EventBroker"]:
