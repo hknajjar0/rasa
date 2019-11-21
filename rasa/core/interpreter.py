@@ -1,18 +1,15 @@
+import json
+import logging
+import os
+import re
 import warnings
+from typing import Any, Dict, List, Optional, Text, Tuple, Union
 
 import aiohttp
 
-import warnings
-import json
-import logging
-import re
-
-import os
-from typing import Text, List, Dict, Any, Union, Optional, Tuple
-
 from rasa.core import constants
-from rasa.core.trackers import DialogueStateTracker
 from rasa.core.constants import INTENT_MESSAGE_PREFIX
+from rasa.core.trackers import DialogueStateTracker
 from rasa.utils import common
 from rasa.utils.endpoints import EndpointConfig
 
