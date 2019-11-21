@@ -106,9 +106,7 @@ def test_create_tracker_store_from_endpoint_config(default_domain: Domain):
         record_exp=3000,
     )
 
-    assert isinstance(
-        tracker_store, type(TrackerStore.create(store, default_domain))
-    )
+    assert isinstance(tracker_store, type(TrackerStore.create(store, default_domain)))
 
 
 def test_fallback_tracker_store_from_endpoint_config(
@@ -125,8 +123,7 @@ def test_fallback_tracker_store_from_endpoint_config(
     monkeypatch.setattr(rasa.core.tracker_store, "RedisTrackerStore", mock)
 
     assert isinstance(
-        InMemoryTrackerStore(domain),
-        type(TrackerStore.create(store, default_domain)),
+        InMemoryTrackerStore(domain), type(TrackerStore.create(store, default_domain)),
     )
 
 
