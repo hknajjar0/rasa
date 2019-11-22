@@ -1,8 +1,8 @@
 import json
 import logging
 import os
-import re
 import warnings
+import re
 from typing import Any, Dict, List, Optional, Text, Tuple, Union
 
 import aiohttp
